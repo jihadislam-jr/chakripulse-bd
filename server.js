@@ -11,12 +11,10 @@ require("dotenv").config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, "0.0.0.0", () => {
-    console.log(`ChakriPulse BD running on port ${PORT}`);
-});
-
 app.use(cors());
 app.use(express.json());
+
+// Serve frontend files
 app.use(express.static(path.join(__dirname, "public")));
 
 const DB_FILE = path.join(__dirname, "jobs.json");
@@ -42,22 +40,17 @@ async function fetchLiveJobs() {
   console.log("Checking for new government job circulars...");
 
   try {
-    const https = require("https");
-
-const response = await axios.get(SOURCE_URL, {
-  timeout: 20000,
-
-  httpsAgent: new https.Agent({
-    rejectUnauthorized: false
-  }),
-
-  headers: {
-    "User-Agent": "ChakriPulseBD/1.0 Job Information Aggregator"
-  }
-});
+    const response = await axios.get(SOURCE_URL, {
+      timeout: 20000,
+      httpsAgent: new https.Agent({
+        rejectUnauthorized: false
+      }),
+      headers: {
+        "User-Agent": "ChakriPulseBD/1.0 Job Information Aggregator"
+      }
+    });
 
     const $ = cheerio.load(response.data);
-
     const foundJobs = [];
 
     $("tr").each((index, row) => {
@@ -70,29 +63,29 @@ const response = await axios.get(SOURCE_URL, {
       const startDate = $(cells[3]).text().trim();
       const deadline = $(cells[4]).text().trim();
 
-      const link = $(cells[5]).find("a").attr("href") ||
-                   $(row).find("a").last().attr("href");
+      const link =
+        $(cells[5]).find("a").attr("href") ||
+        $(row).find("a").last().attr("href");
 
       if (!organization || !link || organization.length < 3) return;
 
       foundJobs.push({
         id: Buffer.from(
           organization + shortName + startDate + deadline
-        ).toString("base64").replace(/[^a-zA-Z0-9]/g, "").slice(0, 32),
+        )
+          .toString("base64")
+          .replace(/[^a-zA-Z0-9]/g, "")
+          .slice(0, 32),
 
         organization,
         shortName,
         startDate,
         deadline,
-
         applicationUrl: link,
-
         source: "Official Teletalk Recruitment System",
         sourceUrl: SOURCE_URL,
-
         category: "Government Job",
         status: "Live",
-
         importedAt: new Date().toISOString()
       });
     });
@@ -131,6 +124,11 @@ const response = await axios.get(SOURCE_URL, {
   }
 }
 
+// Homepage
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
 // API: Get all jobs
 app.get("/api/jobs", (req, res) => {
   const jobs = readJobs();
@@ -146,7 +144,6 @@ app.get("/api/jobs", (req, res) => {
 // API: Search jobs
 app.get("/api/jobs/search", (req, res) => {
   const query = (req.query.q || "").toLowerCase();
-
   const jobs = readJobs();
 
   const filteredJobs = jobs.filter(job =>
@@ -161,21 +158,22 @@ app.get("/api/jobs/search", (req, res) => {
   });
 });
 
-// Admin/manual refresh endpoint
+// Manual refresh
 app.post("/api/update-jobs", async (req, res) => {
   const result = await fetchLiveJobs();
   res.json(result);
 });
 
-// Run immediately when server starts
+// Fetch jobs when server starts
 fetchLiveJobs();
 
-// Automatic update every 6 hours
+// Automatically refresh every 6 hours
 cron.schedule("0 */6 * * *", async () => {
   console.log("Scheduled automatic update started...");
   await fetchLiveJobs();
 });
 
-app.listen(PORT, () => {
-  console.log(`ChakriPulse BD running at http://localhost:${PORT}`);
+// Start server — ONLY ONCE
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`ChakriPulse BD running on port ${PORT}`);
 });
