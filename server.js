@@ -14,12 +14,15 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// Serve frontend files
+// Serve frontend files from public folder
 app.use(express.static(path.join(__dirname, "public")));
 
-const DB_FILE = path.join(__dirname, "jobs.json");
+// Homepage
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
 
-// Official Teletalk live government jobs source
+const DB_FILE = path.join(__dirname, "jobs.json");
 const SOURCE_URL = "https://vas.teletalk.com.bd/clientLivejobs.php";
 
 function readJobs() {
@@ -82,10 +85,13 @@ async function fetchLiveJobs() {
         startDate,
         deadline,
         applicationUrl: link,
+
         source: "Official Teletalk Recruitment System",
         sourceUrl: SOURCE_URL,
+
         category: "Government Job",
         status: "Live",
+
         importedAt: new Date().toISOString()
       });
     });
@@ -113,7 +119,6 @@ async function fetchLiveJobs() {
       checked: foundJobs.length,
       added: newCount
     };
-
   } catch (error) {
     console.error("Automation error:", error.message);
 
@@ -124,12 +129,7 @@ async function fetchLiveJobs() {
   }
 }
 
-// Homepage
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
-});
-
-// API: Get all jobs
+// Get all jobs
 app.get("/api/jobs", (req, res) => {
   const jobs = readJobs();
 
@@ -141,14 +141,15 @@ app.get("/api/jobs", (req, res) => {
   });
 });
 
-// API: Search jobs
+// Search jobs
 app.get("/api/jobs/search", (req, res) => {
   const query = (req.query.q || "").toLowerCase();
   const jobs = readJobs();
 
-  const filteredJobs = jobs.filter(job =>
-    job.organization.toLowerCase().includes(query) ||
-    job.shortName.toLowerCase().includes(query)
+  const filteredJobs = jobs.filter(
+    job =>
+      job.organization.toLowerCase().includes(query) ||
+      job.shortName.toLowerCase().includes(query)
   );
 
   res.json({
@@ -164,16 +165,16 @@ app.post("/api/update-jobs", async (req, res) => {
   res.json(result);
 });
 
-// Fetch jobs when server starts
-fetchLiveJobs();
-
-// Automatically refresh every 6 hours
-cron.schedule("0 */6 * * *", async () => {
-  console.log("Scheduled automatic update started...");
-  await fetchLiveJobs();
-});
-
 // Start server — ONLY ONCE
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`ChakriPulse BD running on port ${PORT}`);
+
+  // Fetch jobs after server starts
+  fetchLiveJobs();
+});
+
+// Automatic update every 6 hours
+cron.schedule("0 */6 * * *", async () => {
+  console.log("Scheduled automatic update started...");
+  await fetchLiveJobs();
 });
